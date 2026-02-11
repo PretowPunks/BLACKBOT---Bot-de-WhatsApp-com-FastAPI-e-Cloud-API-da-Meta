@@ -12,7 +12,7 @@ HELP_WORDS = {"ajuda", "help", "?"}
 
 
 # ============================================================
-# UTILITÁRIOS DE TEMPO
+# UTILITÁRIOS
 # ============================================================
 
 def _now():
@@ -20,15 +20,10 @@ def _now():
 
 
 # ============================================================
-# CARREGAMENTO DE ESTADO
+# CARREGAMENTO DO ESTADO
 # ============================================================
 
 def _load_state_data(wa_id: str):
-    """
-    Carrega estado + dados da sessão.
-    Se sessão não existir → START.
-    Se sesssão estiver expirada → START.
-    """
     row = load_session_full(wa_id)  # (state, data_json, updated_at)
 
     if not row:
@@ -36,7 +31,7 @@ def _load_state_data(wa_id: str):
 
     state, data_json, updated_at = row
 
-    # Timeout da sessão
+    # Timeout
     try:
         last = datetime.fromisoformat(updated_at)
         if _now() - last > timedelta(minutes=TIMEOUT_MINUTES):
@@ -44,7 +39,7 @@ def _load_state_data(wa_id: str):
     except Exception:
         pass
 
-    # Carrega JSON dos dados
+    # JSON
     try:
         data = json.loads(data_json)
     except Exception:
@@ -80,9 +75,7 @@ def next_reply(wa_id: str, text: str) -> str:
     t = (text or "").strip()
     t_low = t.lower()
 
-    # ---------------------------------------------------------
-    # COMANDOS GLOBAIS
-    # ---------------------------------------------------------
+    # ------------------ COMANDOS GLOBAIS ------------------
     if t_low in HELP_WORDS:
         _set_state_data(wa_id, "START", {})
         return _menu()
@@ -95,16 +88,11 @@ def next_reply(wa_id: str, text: str) -> str:
         _set_state_data(wa_id, "START", {})
         return _menu()
 
-    # ---------------------------------------------------------
-    # RECUPERA O ESTADO DA SESSÃO
-    # ---------------------------------------------------------
+    # ------------------ CARREGAR ESTADO -------------------
     state, data = _load_state_data(wa_id)
 
-    # ---------------------------------------------------------
-    # ESTADO: START (menu inicial)
-    # ---------------------------------------------------------
+    # ------------------ START ------------------------------
     if state == "START":
-
         if t in ("1", "encomenda", "fazer encomenda", "quero encomendar"):
             _set_state_data(wa_id, "DATA", {})
             return "Perfeito! Para qual data é a encomenda? (ex: 15/02)"
@@ -124,28 +112,21 @@ def next_reply(wa_id: str, text: str) -> str:
                 "Assim que possível ela te responde por aqui. 😊"
             )
 
-        # Se não reconheceu
         return _menu()
 
-    # ---------------------------------------------------------
-    # ESTADO: DATA
-    # ---------------------------------------------------------
+    # ------------------ DATA ------------------------------
     if state == "DATA":
         data["data"] = t
         _set_state_data(wa_id, "TIPO", data)
         return "É para Festa 🎉 ou Presente 🎁? (responda: festa/presente)"
 
-    # ---------------------------------------------------------
-    # ESTADO: TIPO
-    # ---------------------------------------------------------
+    # ------------------ TIPO ------------------------------
     if state == "TIPO":
         data["tipo"] = t
         _set_state_data(wa_id, "QTD", data)
         return "Quantas unidades (aprox.)? (ex: 50, 100, 200)"
 
-    # ---------------------------------------------------------
-    # ESTADO: QTD
-    # ---------------------------------------------------------
+    # ------------------ QTD -------------------------------
     if state == "QTD":
         data["qtd"] = t
         _set_state_data(wa_id, "OBS", data)
@@ -154,9 +135,7 @@ def next_reply(wa_id: str, text: str) -> str:
             "Se não, digite 'não'."
         )
 
-    # ---------------------------------------------------------
-    # ESTADO: OBS
-    # ---------------------------------------------------------
+    # ------------------ OBS -------------------------------
     if state == "OBS":
         data["obs"] = t if t_low not in ("nao", "não", "n") else ""
         _set_state_data(wa_id, "RESUMO", data)
@@ -171,14 +150,9 @@ def next_reply(wa_id: str, text: str) -> str:
             "Dica: 'não' volta ao menu e você refaz."
         )
 
-    # ---------------------------------------------------------
-    # ESTADO: RESUMO
-    # ---------------------------------------------------------
+    # ------------------ RESUMO ---------------------------
     if state == "RESUMO":
-
-        # Confirma o pedido
         if t_low in ("sim", "s", "ok", "pode", "confirmo", "confirmar"):
-
             save_order(
                 wa_id=wa_id,
                 data=data.get("data"),
@@ -186,22 +160,16 @@ def next_reply(wa_id: str, text: str) -> str:
                 qtd=data.get("qtd"),
                 status="AGUARDANDO_HUMANO"
             )
-
-            # Resetar estado
             _set_state_data(wa_id, "START", {})
-
             return (
-                "Perfeito! ✅ Seu pedido foi registrado e enviado à confeiteira.\n"
-                "Assim que possível ela entrará em contato para confirmar e finalizar.\n\n"
+                "Perfeito! ✅ Seu pedido foi registrado.\n"
+                "A confeiteira vai te chamar para combinar os detalhes.\n\n"
                 "Se quiser fazer outro pedido, digite 1. 😊"
             )
 
-        # Cancelou no resumo → volta ao menu
         _set_state_data(wa_id, "START", {})
         return "Sem problemas! Vamos voltar ao menu. 😊\n\n" + _menu()
 
-    # ---------------------------------------------------------
-    # FALLBACK
-    # ---------------------------------------------------------
+    # ------------------ FALLBACK -------------------------
     _set_state_data(wa_id, "START", {})
     return _menu()

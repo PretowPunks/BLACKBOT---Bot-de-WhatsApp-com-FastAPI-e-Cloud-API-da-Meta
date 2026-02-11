@@ -1,12 +1,14 @@
 import os
 import requests
+import logging
 from fastapi import FastAPI, Request, HTTPException, Body
+from fastapi.responses import JSONResponse, StreamingResponse
 from dotenv import load_dotenv
 
 from storage import (
     init_db, get_conn,
-    mark_processed, add_outbox,
-    add_message, set_pause_bot, get_pause_bot,
+    mark_processed, add_outbox, add_message,
+    set_pause_bot, get_pause_bot,
     list_conversations, list_messages
 )
 
@@ -14,17 +16,15 @@ from engine import next_reply
 
 import io
 import csv
-from fastapi.responses import StreamingResponse
 
-# Carrega variáveis de ambiente
+# =======================================
+# BOOT
+# =======================================
 load_dotenv()
-
-# Inicializa banco
 init_db()
 
 app = FastAPI()
 
-# Credenciais / Configurações
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
 PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
@@ -32,10 +32,9 @@ GRAPH_VERSION = os.getenv("GRAPH_VERSION", "v22.0")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
 
 
-# ============================================================
-# ENVIO DE MENSAGEM
-# ============================================================
-
+# =======================================
+# ENVIO DE TEXTO
+# =======================================
 def send_text(to_wa_id: str, text: str):
     url = f"https://graph.facebook.com/{GRAPH_VERSION}/{PHONE_NUMBER_ID}/messages"
     headers = {
@@ -51,18 +50,16 @@ def send_text(to_wa_id: str, text: str):
 
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=20)
-        print("SEND:", r.status_code, r.text)
+        logging.info(f"SEND {r.status_code} {r.text}")
         return r.status_code, r.text
-
     except Exception as e:
-        print("ERROR SENDING:", str(e))
+        logging.error(f"ERROR SENDING {e}")
         return 500, str(e)
 
 
-# ============================================================
-# VERIFICAÇÃO DO WEBHOOK
-# ============================================================
-
+# =======================================
+# WEBHOOK VERIFY
+# =======================================
 @app.get("/webhook")
 async def webhook_verify(request: Request):
     mode = request.query_params.get("hub.mode")
@@ -75,14 +72,13 @@ async def webhook_verify(request: Request):
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
-# ============================================================
-# RECEBIMENTO DE MENSAGENS
-# ============================================================
-
+# =======================================
+# WEBHOOK RECEIVE
+# =======================================
 @app.post("/webhook")
 async def webhook_receive(request: Request):
     data = await request.json()
-    print("WEBHOOK EVENT:", data)
+    logging.info(f"WEBHOOK EVENT: {data}")
 
     for entry in data.get("entry", []):
         for change in entry.get("changes", []):
@@ -97,44 +93,30 @@ async def webhook_receive(request: Request):
                 if wa_id and msg_id and not mark_processed(msg_id, wa_id):
                     continue
 
-                # -------------------------------------------------------
-                # MENSAGENS DE TEXTO
-                # -------------------------------------------------------
+                # TEXTO
                 if msg_type == "text":
                     body = (msg.get("text") or {}).get("body", "").strip()
 
-                    # Registrar entrada
                     add_message(wa_id, "in", "text", body, wa_message_id=msg_id)
 
-                    # Se estiver pausado → NÃO responder com bot
+                    # Se pausado, humano responde
                     if get_pause_bot(wa_id):
                         continue
 
-                    # Bot gera resposta
+                    # FSM
                     reply = next_reply(wa_id, body)
-                    print("REPLY_GENERATED:", reply)
-
                     status, resp = send_text(wa_id, reply)
 
-                    # Registrar saída do bot
                     add_message(wa_id, "out-bot", "text", reply)
 
-                    # Se falhou, salva na outbox
                     if status >= 400:
                         add_outbox(wa_id, reply, reason=resp)
 
-                # -------------------------------------------------------
-                # MENSAGENS NÃO-TEXTO
-                # -------------------------------------------------------
+                # NÃO TEXTO
                 else:
                     add_message(
-                        wa_id,
-                        "in",
-                        msg_type or "unknown",
-                        "<conteúdo não-texto>",
-                        wa_message_id=msg_id
+                        wa_id, "in", msg_type, "<conteúdo não-texto>", wa_message_id=msg_id
                     )
-
                     send_text(
                         wa_id,
                         "Recebi seu arquivo/figura/áudio. No momento só entendo texto. 😊"
@@ -143,10 +125,9 @@ async def webhook_receive(request: Request):
     return {"status": "EVENT_RECEIVED"}
 
 
-# ============================================================
-# ADMIN: EXPORTAR PEDIDOS
-# ============================================================
-
+# =======================================
+# ORDERS CSV
+# =======================================
 @app.get("/admin/orders.csv")
 async def export_orders_csv():
     with get_conn() as conn:
@@ -157,24 +138,22 @@ async def export_orders_csv():
             ORDER BY id DESC
         """).fetchall()
 
-    output = io.StringIO()
-    writer = csv.writer(output)
+    out = io.StringIO()
+    writer = csv.writer(out)
     writer.writerow(["id", "wa_id", "data", "tipo", "qtd", "status", "created_at"])
     writer.writerows(rows)
-
-    output.seek(0)
+    out.seek(0)
 
     return StreamingResponse(
-        iter([output.getvalue()]),
+        iter([out.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=orders_export.csv"}
+        headers={"Content-Disposition": "attachment; filename=orders.csv"}
     )
 
 
-# ============================================================
-# INBOX — Listar conversas, mensagens, enviar como humano
-# ============================================================
-
+# =======================================
+# INBOX
+# =======================================
 @app.get("/inbox/conversations")
 async def inbox_conversations(limit: int = 100):
     rows = list_conversations(limit=limit)
@@ -191,17 +170,21 @@ async def inbox_conversations(limit: int = 100):
 
 @app.get("/inbox/messages/{wa_id}")
 async def inbox_messages(wa_id: str, limit: int = 200):
-    rows = list_messages(wa_id, limit=limit)
-    return [
-        {
-            "direction": r[0],
-            "type": r[1],
-            "body": r[2],
-            "wa_message_id": r[3],
-            "created_at": r[4]
-        }
-        for r in rows
-    ]
+    try:
+        rows = list_messages(wa_id, limit=limit)
+        return [
+            {
+                "direction": r[0],
+                "type": r[1],
+                "body": r[2],
+                "wa_message_id": r[3],
+                "created_at": r[4]
+            }
+            for r in rows
+        ]
+    except Exception:
+        logging.exception(f"[inbox_messages] erro ao listar mensagens")
+        raise HTTPException(status_code=500, detail="inbox_messages_failed")
 
 
 @app.post("/inbox/send/{wa_id}")
@@ -209,36 +192,41 @@ async def inbox_send(wa_id: str, payload: dict = Body(...)):
     text = (payload.get("text") or "").strip()
 
     if not text:
-        raise HTTPException(status_code=400, detail="Texto vazio")
+        raise HTTPException(status_code=400, detail="texto vazio")
 
     status, resp = send_text(wa_id, text)
 
-    # Registrar como saída humana
     add_message(wa_id, "out-human", "text", text)
 
     if status >= 400:
         add_outbox(wa_id, text, reason=resp)
-        raise HTTPException(status_code=502, detail=f"Falha ao enviar: {resp}")
+        raise HTTPException(status_code=502, detail="falha ao enviar")
 
-    return {"status": "SENT"}
+    return {"status": "sent"}
 
 
 @app.post("/inbox/pause/{wa_id}")
 async def inbox_pause(wa_id: str):
     set_pause_bot(wa_id, True)
-    return {"status": "BOT_PAUSED"}
+    return {"status": "paused"}
 
 
 @app.post("/inbox/resume/{wa_id}")
 async def inbox_resume(wa_id: str):
     set_pause_bot(wa_id, False)
-    return {"status": "BOT_RESUMED"}
+    return {"status": "resumed"}
 
+
+# =======================================
+# MIDDLEWARE: ADMIN TOKEN
+# =======================================
 @app.middleware("http")
 async def admin_token_guard(request: Request, call_next):
-    if request.url.path.startswith("/inbox/"):
-        if ADMIN_TOKEN:
-            header_token = request.headers.get("X-Admin-Token")
-            if header_token != ADMIN_TOKEN:
-                raise HTTPException(status_code=401, detail="Unauthorized")
+    if request.url.path.startswith("/inbox/") and ADMIN_TOKEN:
+        token = (
+            request.headers.get("X-Admin-Token")
+            or request.headers.get("Admin-Token")
+        )
+        if token != ADMIN_TOKEN:
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
     return await call_next(request)
