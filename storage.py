@@ -150,3 +150,35 @@ def list_messages(wa_id: str, limit: int = 200):
             LIMIT ?
         """, (wa_id, limit)).fetchall()
         return rows
+
+# --- adicionar no storage.py ---
+
+def load_session_full(wa_id: str):
+    """
+    Retorna (state, data_json, updated_at) da sessão.
+    Se não existir, retorna None.
+    """
+    with get_conn() as conn:
+        c = conn.cursor()
+        return c.execute(
+            "SELECT state, data_json, updated_at FROM sessions WHERE wa_id=?",
+            (wa_id,)
+        ).fetchone()
+
+
+def save_session(wa_id: str, state: str, data_json: str):
+    """
+    Upsert da sessão (state/data_json/updated_at).
+    """
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO sessions(wa_id, state, data_json, updated_at)
+            VALUES(?,?,?,?)
+            ON CONFLICT(wa_id) DO UPDATE SET
+              state=excluded.state,
+              data_json=excluded.data_json,
+              updated_at=excluded.updated_at
+        """, (wa_id, state, data_json, datetime.utcnow().isoformat()))
+        conn.commit()
+    
