@@ -29,6 +29,7 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
 PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
 GRAPH_VERSION = os.getenv("GRAPH_VERSION", "v22.0")
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
 
 
 # ============================================================
@@ -232,3 +233,12 @@ async def inbox_pause(wa_id: str):
 async def inbox_resume(wa_id: str):
     set_pause_bot(wa_id, False)
     return {"status": "BOT_RESUMED"}
+
+@app.middleware("http")
+async def admin_token_guard(request: Request, call_next):
+    if request.url.path.startswith("/inbox/"):
+        if ADMIN_TOKEN:
+            header_token = request.headers.get("X-Admin-Token")
+            if header_token != ADMIN_TOKEN:
+                raise HTTPException(status_code=401, detail="Unauthorized")
+    return await call_next(request)
