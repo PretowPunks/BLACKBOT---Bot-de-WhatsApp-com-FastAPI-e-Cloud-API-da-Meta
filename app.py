@@ -234,7 +234,18 @@ async def admin_token_guard(request: Request, call_next):
     return await call_next(request)
 
 
+
 @app.get("/inbox", response_class=HTMLResponse)
 def serve_inbox():
-    with open("inbox.html", "r", encoding="utf-8") as f:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    inbox_path = os.path.join(base_dir, "inbox.html")
+    if not os.path.exists(inbox_path):
+        # Ajuda a diagnosticar no Render caso o arquivo não tenha sido copiado na imagem
+        return HTMLResponse(
+            "<h3>inbox.html não encontrado no container.</h3>"
+            "<p>Verifique se o Dockerfile copia o arquivo para a imagem.</p>",
+            status_code=500
+        )
+    with open(inbox_path, "r", encoding="utf-8") as f:
         return f.read()
+
