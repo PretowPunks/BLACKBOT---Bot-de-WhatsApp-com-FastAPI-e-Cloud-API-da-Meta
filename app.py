@@ -2,7 +2,7 @@ import os
 import requests
 import logging
 from fastapi import FastAPI, Request, HTTPException, Body
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from dotenv import load_dotenv
 
 from storage import (
@@ -220,13 +220,21 @@ async def inbox_resume(wa_id: str):
 # =======================================
 # MIDDLEWARE: ADMIN TOKEN
 # =======================================
+
 @app.middleware("http")
 async def admin_token_guard(request: Request, call_next):
+    # Protege os endpoints do Inbox
     if request.url.path.startswith("/inbox/") and ADMIN_TOKEN:
         token = (
             request.headers.get("X-Admin-Token")
-            or request.headers.get("Admin-Token")
+            or request.headers.get("Admin-Token")  # header alternativo
         )
         if token != ADMIN_TOKEN:
             return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
     return await call_next(request)
+
+
+@app.get("/inbox", response_class=HTMLResponse)
+def serve_inbox():
+    with open("inbox.html", "r", encoding="utf-8") as f:
+        return f.read()
