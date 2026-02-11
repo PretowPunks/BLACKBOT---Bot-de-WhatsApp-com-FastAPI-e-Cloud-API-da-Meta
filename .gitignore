@@ -1,0 +1,28 @@
+# Ambiente virtual (qualquer variação)
+.venv/
+venv/
+ENV/
+env/
+
+# Variáveis sensíveis
+.env
+*.env
+
+# Banco de dados local (NÃO subir)
+bot.db
+
+# Cache e artefatos Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Arquivos temporários diversos
+*.log
+
+# VS Code
+.vscode/
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db

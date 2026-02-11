@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Inbox (MVP) — Confeiteira</title>
+<style>
+  :root{
+    --bg:#ffffff; --muted:#f6f7f9; --line:#e6e8eb; --text:#111827;
+    --in:#eef2ff; --out:#dcfce7; --warn:#fef3c7; --danger:#fee2e2;
+    --primary:#2563eb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  header{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center}
+  header h1{font-size:16px;margin:0;flex:1}
+  #top-controls{display:flex;gap:8px;align-items:center}
+  input,button,select{font:inherit}
+  input[type=text]{padding:8px;border:1px solid var(--line);border-radius:6px;min-width:220px}
+  button{padding:8px 10px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer}
+  button.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+  button:disabled{opacity:.6;cursor:not-allowed}
+
+  main{display:flex;height:calc(100vh - 56px)}
+  #list{width:36%;max-width:520px;border-right:1px solid var(--line);overflow:auto;background:#fff}
+  #chat{flex:1;display:flex;flex-direction:column;background:#fff}
+  .item{padding:12px;border-bottom:1px solid var(--line);cursor:pointer}
+  .item:hover{background:var(--muted)}
+  .waid{font-weight:600}
+  .meta{color:#6b7280;font-size:12px}
+
+  #chat-header{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+  #h-waid{font-weight:700}
+  #h-status{color:#6b7280}
+  #msgs{flex:1;overflow:auto;padding:14px;background:#fff}
+  .bubble{max-width:70%;margin:6px 0;padding:10px 12px;border-radius:10px;white-space:pre-wrap;box-shadow:0 1px 0 rgba(0,0,0,.04)}
+  .in{background:var(--in);align-self:flex-start}
+  .out{background:var(--out);align-self:flex-end}
+  .sys{background:var(--warn);align-self:center}
+  #toolbar{padding:10px 12px;border-top:1px solid var(--line);display:flex;gap:8px}
+  #text{flex:1;padding:10px;border:1px solid var(--line);border-radius:8px}
+  #send{padding:10px 14px}
+
+  #statusbar{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
+             background:#111827;color:#fff;padding:8px 12px;border-radius:999px;
+             font-size:12px;opacity:0;transition:.25s}
+  #statusbar.show{opacity:1}
+  .muted{color:#6b7280}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Inbox — Confeiteira</h1>
+  <div id="top-controls">
+    <!-- Se um dia proteger /inbox/* com token, habilite o input abaixo -->
+    <input id="adminToken" type="text" placeholder="X-Admin-Token (opcional)" style="display:none">
+    <input id="apiBase" type="text" placeholder="API base (vazio = mesmo host)" />
+    <button id="refresh" title="Atualizar lista">Atualizar</button>
+  </div>
+</header>
+
+<main>
+  <aside id="list"></aside>
+
+  <section id="chat">
+    <div id="chat-header">
+      <div style="flex:1">
+        <div><span id="h-waid" class="muted">Selecione uma conversa</span></div>
+        <div id="h-status" class="muted"></div>
+      </div>
+      <div>
+        <button id="pause">Pausar bot</button>
+        <button id="resume">Retomar bot</button>
+      </div>
+    </div>
+
+    <div id="msgs"></div>
+
+    <div id="toolbar">
+      <input id="text" placeholder="Responder como humano... (Enter para enviar)" autocomplete="off"/>
+      <button id="send" class="primary">Enviar</button>
+    </div>
+  </section>
+</main>
+
+<div id="statusbar"></div>
+
+<script>
+/* ==========================
+   CONFIG INICIAL
+========================== */
+let API = ""; // vazio = mesmo host do FastAPI (ex.: http://localhost:8000)
+let currentWaId = null;
+let pollingConvs = null;
+let pollingMsgs  = null;
+
+const els = {
+  list: document.getElementById('list'),
+  msgs: document.getElementById('msgs'),
+  text: document.getElementById('text'),
+  send: document.getElementById('send'),
+  pause: document.getElementById('pause'),
+  resume: document.getElementById('resume'),
+  h_waid: document.getElementById('h-waid'),
+  h_status: document.getElementById('h-status'),
+  refresh: document.getElementById('refresh'),
+  apiBase: document.getElementById('apiBase'),
+  statusbar: document.getElementById('statusbar'),
+  adminToken: document.getElementById('adminToken'),
+};
+
+els.apiBase.addEventListener('change', ()=> {
+  API = els.apiBase.value.trim();
+  toast('Base API atualizada');
+  loadConversations();
+});
+els.refresh.addEventListener('click', ()=> loadConversations());
+
+/* ==========================
+   HELPERS
+========================== */
+function headers(){
+  const h = {'Content-Type':'application/json'};
+  const t = (els.adminToken.value||'').trim();
+  if(t) h['X-Admin-Token'] = t; // caso você proteja os endpoints
+  return h;
+}
+function toast(msg){
+  els.statusbar.textContent = msg;
+  els.statusbar.classList.add('show');
+  setTimeout(()=> els.statusbar.classList.remove('show'), 1600);
+}
+function fmtDate(s){
+  try { return new Date(s).toLocaleString(); } catch(e){ return s; }
+}
+function clearChat(){
+  els.msgs.innerHTML = '';
+  els.h_waid.textContent = 'Selecione uma conversa';
+  els.h_status.textContent = '';
+}
+
+/* ==========================
+   CONVERSAS
+========================== */
+async function loadConversations(){
+  try{
+    const r = await fetch(`${API}/inbox/conversations`);
+    if(!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+
+    els.list.innerHTML = "";
+    if(!data.length){
+      els.list.innerHTML = '<div class="item"><div class="muted">Sem conversas ainda</div></div>';
+      return;
+    }
+
+    data.forEach(x=>{
+      const div = document.createElement('div');
+      div.className = 'item';
+      div.innerHTML = `
+        <div class="waid">${x.wa_id}</div>
+        <div class="meta">Última: ${fmtDate(x.last_at)} • in:${x.in_msgs} out:${x.out_msgs}</div>`;
+      div.onclick = ()=> openChat(x.wa_id);
+      els.list.appendChild(div);
+    });
+
+  }catch(e){
+    console.error(e);
+    toast('Falha ao carregar conversas');
+  }
+}
+
+async function openChat(wa_id){
+  currentWaId = wa_id;
+  els.h_waid.textContent = wa_id;
+  await loadMessages();
+
+  // reseta polling
+  if(pollingMsgs) clearInterval(pollingMsgs);
+  pollingMsgs = setInterval(loadMessages, 4000);
+}
+
+/* ==========================
+   MENSAGENS
+========================== */
+async function loadMessages(){
+  if(!currentWaId) return;
+
+  try{
+    const r = await fetch(`${API}/inbox/messages/${currentWaId}?limit=200`);
+    if(!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+
+    els.msgs.innerHTML = "";
+    // data vem DESC do backend; vamos reverter para mostrar cronológico crescente
+    data.reverse().forEach(m=>{
+      const b = document.createElement('div');
+      const dir = m.direction==='in' ? 'in' : 'out';
+      b.className = `bubble ${dir}`;
+      b.textContent = m.body || '';
+      els.msgs.appendChild(b);
+    });
+    els.msgs.scrollTop = els.msgs.scrollHeight;
+  }catch(e){
+    console.error(e);
+    toast('Falha ao carregar mensagens');
+  }
+}
+
+async function send(){
+  const text = (els.text.value || '').trim();
+  if(!text || !currentWaId) return;
+  els.send.disabled = true;
+
+  try{
+    const r = await fetch(`${API}/inbox/send/${currentWaId}`, {
+      method:'POST',
+      headers: headers(),
+      body: JSON.stringify({text})
+    });
+    if(!r.ok){
+      const err = await r.text();
+      throw new Error(err);
+    }
+    els.text.value = '';
+    await loadMessages();
+  }catch(e){
+    console.error(e);
+    toast('Falha ao enviar mensagem');
+  }finally{
+    els.send.disabled = false;
+  }
+}
+
+/* ==========================
+   HANDOFF (pausar/retomar)
+========================== */
+async function pause(){
+  if(!currentWaId) return;
+  try{
+    const r = await fetch(`${API}/inbox/pause/${currentWaId}`, {method:'POST', headers: headers()});
+    if(!r.ok) throw new Error(await r.text());
+    els.h_status.textContent = '(bot pausado)';
+    toast('Bot pausado');
+  }catch(e){
+    console.error(e);
+    toast('Falha ao pausar bot');
+  }
+}
+async function resume(){
+  if(!currentWaId) return;
+  try{
+    const r = await fetch(`${API}/inbox/resume/${currentWaId}`, {method:'POST', headers: headers()});
+    if(!r.ok) throw new Error(await r.text());
+    els.h_status.textContent = '';
+    toast('Bot retomado');
+  }catch(e){
+    console.error(e);
+    toast('Falha ao retomar bot');
+  }
+}
+
+/* ==========================
+   EVENTOS UI
+========================== */
+els.send.addEventListener('click', send);
+els.text.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && !e.shiftKey){
+    e.preventDefault();
+    send();
+  }
+});
+els.pause.addEventListener('click', pause);
+els.resume.addEventListener('click', resume);
+
+// polling de conversas
+loadConversations();
+if(pollingConvs) clearInterval(pollingConvs);
+pollingConvs = setInterval(loadConversations, 10000);
+
+</script>
+</body>
+</html>
