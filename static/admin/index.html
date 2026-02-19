@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Admin · Dashboard</title>
+  <link rel="stylesheet" href="/static/admin/styles.css"/>
+  <style>
+    .grid-3 {
+      display: grid; gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+    .tile {
+      background: #0f1116; border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px; display: grid; gap: 8px;
+    }
+    .tile h3 { margin: 0; }
+    .tile p { margin: 0; color: var(--muted); font-size: 14px; min-height: 38px; }
+    .tile .actions { display:flex; gap:8px; }
+    .link-btn { text-decoration: none; display: inline-block; }
+  </style>
+</head>
+<body>
+  <header class="appbar">
+    <div class="appbar__title">Admin · Dashboard</div>
+    <div class="appbar__actions">
+      <a href="/static/admin/products.html" class="btn btn--ghost link-btn">Ir para Produtos</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- CONFIG RÁPIDA -->
+    <section class="card">
+      <h2>Configuração Rápida</h2>
+      <div class="row">
+        <label>Tenant Slug</label>
+        <input id="tenantSlug" placeholder="ex.: confeitaria-ana" />
+      </div>
+      <div class="row">
+        <label>X-Admin-Token</label>

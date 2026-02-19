@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Admin · Cardápio</title>
+  <link rel="stylesheet" href="./styles.css"/>
+</head>
+<body>
+  <header class="appbar">
+    <div class="appbar__title">Admin · Cardápio</div>
+    <div class="appbar__actions">
+      <button id="btnRefresh" class="btn btn--ghost">Atualizar</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- CONFIG -->
+    <section class="card">
+      <h2>Configuração</h2>
+      <div class="row">
+        <label>Tenant Slug</label>
+        <input id="tenantSlug" placeholder="ex.: confeitaria-ana" />
+      </div>
+      <div class="row">
+        <label>X-Admin-Token</label>
+        <input id="adminToken" placeholder="cole o token do .env" />
+      </div>
+      <div class="row row--inline">
+        <button id="btnSaveCfg" class="btn">Salvar</button>
+        <button id="btnClearCfg" class="btn btn--ghost">Limpar</button>
+      </div>
+      <p class="hint">As configurações ficam salvas no seu navegador (localStorage).</p>
+    </section>
+
+    <!-- NOVO PRODUTO -->
+    <section class="card">
+      <h2>Novo Produto</h2>
+      <div class="grid">
+        <div class="row">
+          <label>Nome</label>
+          <input id="np_name" placeholder="Ex.: Bolo de Cenoura" />
+        </div>
+        <div class="row">
+          <label>Descrição</label>
+          <textarea id="np_description" placeholder="Breve descrição do produto"></textarea>
+        </div>
+        <div class="row row--2col">
+          <div>
+            <label>SKU (opcional)</label>
+            <input id="np_sku" placeholder="Ex.: BOLO-CEN-01" />
+          </div>
+          <div>
+            <label>Preço (R$)</label>
+            <input id="np_price" placeholder="Ex.: 25,90" inputmode="decimal"/>
+          </div>
+        </div>
+        <div class="row">
+          <label>Imagem</label>
+          <input id="np_image" type="file" accept="image/*"/>
+          <img id="np_preview" class="preview" style="display:none"/>
+        </div>
+        <div class="row row--inline">
+          <button id="btnCreate" class="btn">Criar produto</button>
+          <button id="btnResetForm" class="btn btn--ghost">Limpar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- LISTA -->
+    <section class="card">
+      <h2>Produtos</h2>
+      <div id="products" class="products"></div>
+      <div id="emptyState" class="empty" style="display:none">
+        Nenhum produto cadastrado.
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast simples -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="./products.js"></script>
+</body>
+</html>
