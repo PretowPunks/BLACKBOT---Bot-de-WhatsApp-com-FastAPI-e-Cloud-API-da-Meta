@@ -50,9 +50,9 @@ function centsToMoneyBR(cents) {
 }
 
 function ensureCfg() {
-  $("#tenantSlug").value = cfg.tenant || FIXED_TENANT;
+  $("#tenantSlug").value = cfg.tenant || FIXED_TENANT; // mostra no input
   $("#adminToken").value = cfg.token;
-  return Boolean(cfg.token); // tenant vira sempre o fixo
+  return Boolean(cfg.token); // só exigimos token; o tenant tem fallback
 }
 
 // API helper
@@ -73,9 +73,7 @@ async function api(path, { method = "GET", body } = {}) {
 
   if (!res.ok) {
     let errTxt = "";
-    try {
-      errTxt = await res.text();
-    } catch {}
+    try { errTxt = await res.text(); } catch {}
     throw new Error(`Falha API ${res.status}: ${errTxt}`);
   }
 
@@ -117,7 +115,7 @@ async function presignAndUpload(file) {
 // ---------- CRUD ----------
 async function listProducts() {
   const data = await api(`/api/t/:tenant/products`);
-  // 🤩 Backend retorna { items, total, ... }
+  // Backend retorna { items, total, limit, offset }
   renderProducts(data.items || []);
 }
 
@@ -128,8 +126,8 @@ async function createProduct() {
   const price_cents = moneyToCents($("#np_price").value);
   const file = $("#np_image").files?.[0];
 
-  if (!name) return toast("Informe o nome do produto", "warn");
-  if (price_cents <= 0) return toast("Informe um preço válido", "warn");
+  if (!name) { toast("Informe o nome do produto", "warn"); return; }
+  if (price_cents <= 0) { toast("Informe um preço válido", "warn"); return; }
 
   $("#btnCreate").disabled = true;
   $("#btnCreate").textContent = "Enviando...";
@@ -155,7 +153,7 @@ async function createProduct() {
     resetForm();
   } catch (err) {
     console.error(err);
-    toast(err.message, "error", 3600);
+    toast(err.message || "Erro ao criar produto", "error", 3600);
   } finally {
     $("#btnCreate").disabled = false;
     $("#btnCreate").textContent = "Criar produto";
@@ -163,7 +161,7 @@ async function createProduct() {
 }
 
 async function updateProduct(id, fields) {
-  await api(`/api/t/:tenant/products/${id}`, {
+  await api(`/api/t/:tenant/products/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: fields,
   });
@@ -171,7 +169,7 @@ async function updateProduct(id, fields) {
 
 async function deleteProduct(id) {
   if (!confirm("Tem certeza que deseja remover este produto?")) return;
-  await api(`/api/t/:tenant/products/${id}`, { method: "DELETE" });
+  await api(`/api/t/:tenant/products/${encodeURIComponent(id)}`, { method: "DELETE" });
   toast("Produto removido", "success");
   await listProducts();
 }
@@ -203,7 +201,7 @@ function renderProducts(items) {
 
     const img = document.createElement("img");
     img.className = "product-card__img";
-    img.alt = p.name;
+    img.alt = p.name || "";
     img.src =
       p.image_url ||
       "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
@@ -217,7 +215,7 @@ function renderProducts(items) {
 
     const price = document.createElement("div");
     price.className = "product-card__price";
-    price.textContent = centsToMoneyBR(p.price_cents);
+    price.textContent = centsToMoneyBR(p.price_cents || 0);
 
     const desc = document.createElement("div");
     desc.className = "product-card__desc";
@@ -259,9 +257,7 @@ function openEditor(card, p) {
     </div>
     <div class="row">
       <label>Descrição</label>
-      <textarea class="ed_description">${htmlEscape(
-        p.description || ""
-      )}</textarea>
+      <textarea class="ed_description">${htmlEscape(p.description || "")}</textarea>
     </div>
     <div class="row row--2col">
       <div>
@@ -270,9 +266,7 @@ function openEditor(card, p) {
       </div>
       <div>
         <label>Preço (R$)</label>
-        <input class="ed_price" value="${(
-          Number(p.price_cents) / 100
-        ).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}">
+        <input class="ed_price" value="${(Number(p.price_cents || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}">
       </div>
     </div>
     <div class="row">
@@ -297,20 +291,30 @@ function openEditor(card, p) {
     };
 
     const imgFile = editor.querySelector(".ed_image").files?.[0];
-
     if (imgFile) {
-      const newUrl = await presignAndUpload(imgFile);
-      fields.image_url = newUrl;
+      try {
+        const newUrl = await presignAndUpload(imgFile);
+        fields.image_url = newUrl;
+      } catch (e) {
+        console.error(e);
+        toast(e.message || "Falha ao subir imagem", "error");
+        return;
+      }
     }
 
-    await updateProduct(p.id, fields);
-    toast("Produto atualizado!", "success");
-    await listProducts();
-    editor.remove();
+    try {
+      await updateProduct(p.id, fields);
+      toast("Produto atualizado", "success");
+      await listProducts();
+      editor.remove();
+    } catch (e) {
+      console.error(e);
+      toast(e.message || "Erro ao atualizar", "error");
+    }
   };
 
   card.append(editor);
-};
+}
 
 function htmlEscape(s) {
   return String(s)
@@ -330,16 +334,16 @@ function bindEvents() {
   };
 
   $("#btnClearCfg").onclick = () => {
-  localStorage.removeItem("tenant_slug");
-  localStorage.removeItem("admin_token");
-  $("#tenantSlug").value = FIXED_TENANT; // mostra o slug fixo no input
-  $("#adminToken").value = "";
-  toast("Config limpa", "info");
-};
+    localStorage.removeItem("tenant_slug");
+    localStorage.removeItem("admin_token");
+    $("#tenantSlug").value = FIXED_TENANT;
+    $("#adminToken").value = "";
+    toast("Config limpa", "info");
+  };
 
   $("#btnRefresh").onclick = () => {
-    if (!ensureCfg()) return toast("Configure Token Admin", "warn");
-    listProducts().catch((e) => toast(e.message, "error"));
+    if (!ensureCfg()) { toast("Configure Token Admin", "warn"); return; }
+    listProducts().catch((e) => toast(e.message || "Falha ao listar", "error"));
   };
 
   $("#np_image").addEventListener("change", (e) => {
@@ -347,15 +351,14 @@ function bindEvents() {
     const prev = $("#np_preview");
     if (file) {
       const url = URL.createObjectURL(file);
-      prev.src = url;
-      prev.style.display = "block";
+      prev.src = url; prev.style.display = "block";
     } else {
       prev.style.display = "none";
     }
   });
 
   $("#btnCreate").onclick = () => {
-    if (!ensureCfg()) return toast("Configure Token Admin", "warn");
+    if (!ensureCfg()) { toast("Configure Token Admin", "warn"); return; }
     createProduct();
   };
 
@@ -366,11 +369,8 @@ function bindEvents() {
 (function init() {
   ensureCfg();
   bindEvents();
-
-  if (cfg.token) {
-    listProducts().catch(() => {});
-  }
-
-  // Mostra o tenant fixo na UI
-  $("#tenantSlug").value = FIXED_TENANT;
+  // Tenta listar na primeira carga se já tiver token
+  if (cfg.token) listProducts().catch(() => {});
+  // Mostra o tenant fixo no input
+  $("#tenantSlug").value = getTenant();
 })();
