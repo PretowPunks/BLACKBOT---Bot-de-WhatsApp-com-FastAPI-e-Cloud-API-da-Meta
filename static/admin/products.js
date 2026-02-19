@@ -1,15 +1,18 @@
 /* Admin do Cardápio - Allisson (MVP)
  * - Presign PUT → R2
  * - CRUD de produtos
- * - Config por localStorage (com fallback)
- * - Corrigido para backend que retorna { items, total, ... }
+ * - Branding (banner/logotipo)
+ * - Config via localStorage
  */
 
-const FIXED_TENANT = "confeiteira"; // 🔥 SLUG FIXO DA LOJA
+const FIXED_TENANT = "confeiteira";
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+/* ======================
+   CONFIG (tenant + token)
+====================== */
 const cfg = {
   get tenant() { return localStorage.getItem("tenant_slug") || ""; },
   set tenant(v) { localStorage.setItem("tenant_slug", (v || "").trim()); },
@@ -17,12 +20,43 @@ const cfg = {
   set token(v) { localStorage.setItem("admin_token", (v || "").trim()); },
 };
 
-// Slug final usado em todas as chamadas:
 function getTenant() {
   const raw = cfg.tenant?.trim().toLowerCase();
-  return raw || FIXED_TENANT; // fallback seguro
+  return raw || FIXED_TENANT;
 }
 
+/* ======================
+   BRAND (logo/banner)
+====================== */
+const brand = {
+  get url() { return localStorage.getItem("brand_logo_url") || ""; },
+  set url(v) { localStorage.setItem("brand_logo_url", (v || "").trim()); },
+};
+
+function renderBrandFromStorage() {
+  const url = brand.url;
+  const banner = $("#brandBanner");
+  const bannerImg = $("#brandBannerImg");
+  const prev = $("#brandPreview");
+
+  if (url) {
+    banner.style.display = "block";
+    bannerImg.src = url;
+
+    prev.src = url;
+    prev.style.display = "inline-block";
+  } else {
+    banner.style.display = "none";
+    bannerImg.src = "";
+
+    prev.src = "";
+    prev.style.display = "none";
+  }
+}
+
+/* ======================
+   HELPERS
+====================== */
 function toast(msg, kind = "info", ms = 2400) {
   const el = $("#toast");
   el.textContent = msg;
@@ -50,12 +84,14 @@ function centsToMoneyBR(cents) {
 }
 
 function ensureCfg() {
-  $("#tenantSlug").value = cfg.tenant || FIXED_TENANT; // mostra no input
+  $("#tenantSlug").value = cfg.tenant || FIXED_TENANT;
   $("#adminToken").value = cfg.token;
-  return Boolean(cfg.token); // só exigimos token; o tenant tem fallback
+  return Boolean(cfg.token);
 }
 
-// API helper
+/* ======================
+   API
+====================== */
 async function api(path, { method = "GET", body } = {}) {
   const tenant = getTenant();
   const token = cfg.token;
@@ -72,16 +108,18 @@ async function api(path, { method = "GET", body } = {}) {
   });
 
   if (!res.ok) {
-    let errTxt = "";
-    try { errTxt = await res.text(); } catch {}
-    throw new Error(`Falha API ${res.status}: ${errTxt}`);
+    let err = "";
+    try { err = await res.text(); } catch {}
+    throw new Error(`Erro ${res.status}: ${err}`);
   }
 
   const ct = res.headers.get("content-type") || "";
   return ct.includes("application/json") ? res.json() : res.text();
 }
 
-// Upload para R2
+/* ======================
+   UPLOAD R2 (banner + produtos)
+====================== */
 async function presignAndUpload(file) {
   if (!file) return null;
 
@@ -89,7 +127,7 @@ async function presignAndUpload(file) {
     method: "POST",
     body: {
       filename: file.name,
-      content_type: file.type || "application/octet-stream",
+      content_type: file.type,
       expires_in: 600,
     },
   });
@@ -98,24 +136,25 @@ async function presignAndUpload(file) {
 
   const putRes = await fetch(put_url, {
     method: "PUT",
-    headers: {
-      "Content-Type": content_type || file.type || "application/octet-stream",
-    },
+    headers: { "Content-Type": content_type },
     body: file,
   });
 
   if (!putRes.ok) {
-    const t = await putRes.text().catch(() => "");
-    throw new Error(`Falha no upload R2: ${putRes.status} ${t}`);
+    let err = "";
+    try { err = await putRes.text(); } catch {}
+    throw new Error(`Falha no upload R2: ${putRes.status} ${err}`);
   }
 
   return public_url;
 }
 
-// ---------- CRUD ----------
+/* ======================
+   CRUD
+====================== */
 async function listProducts() {
   const data = await api(`/api/t/:tenant/products`);
-  // Backend retorna { items, total, limit, offset }
+  renderBrandFromStorage();  // 🔥 garante banner sempre visível
   renderProducts(data.items || []);
 }
 
@@ -126,8 +165,8 @@ async function createProduct() {
   const price_cents = moneyToCents($("#np_price").value);
   const file = $("#np_image").files?.[0];
 
-  if (!name) { toast("Informe o nome do produto", "warn"); return; }
-  if (price_cents <= 0) { toast("Informe um preço válido", "warn"); return; }
+  if (!name) return toast("Informe o nome", "warn");
+  if (price_cents <= 0) return toast("Informe preço válido", "warn");
 
   $("#btnCreate").disabled = true;
   $("#btnCreate").textContent = "Enviando...";
@@ -151,35 +190,41 @@ async function createProduct() {
     toast("Produto criado!", "success");
     await listProducts();
     resetForm();
-  } catch (err) {
-    console.error(err);
-    toast(err.message || "Erro ao criar produto", "error", 3600);
+  } catch (e) {
+    console.error(e);
+    toast(e.message, "error");
   } finally {
     $("#btnCreate").disabled = false;
     $("#btnCreate").textContent = "Criar produto";
   }
 }
 
+/* ======================
+   UPDATE / DELETE
+====================== */
 async function updateProduct(id, fields) {
-  await api(`/api/t/:tenant/products/${encodeURIComponent(id)}`, {
+  await api(`/api/t/:tenant/products/${id}`, {
     method: "PUT",
     body: fields,
   });
 }
 
 async function deleteProduct(id) {
-  if (!confirm("Tem certeza que deseja remover este produto?")) return;
-  await api(`/api/t/:tenant/products/${encodeURIComponent(id)}`, { method: "DELETE" });
-  toast("Produto removido", "success");
+  if (!confirm("Remover este produto?")) return;
+  await api(`/api/t/:tenant/products/${id}`, { method: "DELETE" });
+  toast("Removido!", "success");
   await listProducts();
 }
 
-// ---------- UI ----------
+/* ======================
+   RENDER UI
+====================== */
 function resetForm() {
-  $("#np_name").value = "";
-  $("#np_description").value = "";
-  $("#np_sku").value = "";
+  $("#np_name").value =
+  $("#np_description").value =
+  $("#np_sku").value =
   $("#np_price").value = "";
+
   $("#np_image").value = "";
   $("#np_preview").style.display = "none";
 }
@@ -201,10 +246,8 @@ function renderProducts(items) {
 
     const img = document.createElement("img");
     img.className = "product-card__img";
+    img.src = p.image_url || "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
     img.alt = p.name || "";
-    img.src =
-      p.image_url ||
-      "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 
     const body = document.createElement("div");
     body.className = "product-card__body";
@@ -235,8 +278,10 @@ function renderProducts(items) {
     btnDel.onclick = () => deleteProduct(p.id);
 
     actions.append(btnEdit, btnDel);
+
     body.append(title, price, desc, actions);
     card.append(img, body);
+
     el.append(card);
   }
 }
@@ -255,10 +300,12 @@ function openEditor(card, p) {
       <label>Nome</label>
       <input class="ed_name" value="${htmlEscape(p.name || "")}">
     </div>
+
     <div class="row">
       <label>Descrição</label>
       <textarea class="ed_description">${htmlEscape(p.description || "")}</textarea>
     </div>
+
     <div class="row row--2col">
       <div>
         <label>SKU</label>
@@ -266,13 +313,16 @@ function openEditor(card, p) {
       </div>
       <div>
         <label>Preço (R$)</label>
-        <input class="ed_price" value="${(Number(p.price_cents || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}">
+        <input class="ed_price"
+               value="${(Number(p.price_cents || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}">
       </div>
     </div>
+
     <div class="row">
       <label>Imagem (substituir)</label>
       <input type="file" class="ed_image" accept="image/*">
     </div>
+
     <div class="row row--inline">
       <button class="btn btn--ghost ed_cancel">Fechar</button>
       <button class="btn ed_save">Salvar alterações</button>
@@ -292,29 +342,17 @@ function openEditor(card, p) {
 
     const imgFile = editor.querySelector(".ed_image").files?.[0];
     if (imgFile) {
-      try {
-        const newUrl = await presignAndUpload(imgFile);
-        fields.image_url = newUrl;
-      } catch (e) {
-        console.error(e);
-        toast(e.message || "Falha ao subir imagem", "error");
-        return;
-      }
+      fields.image_url = await presignAndUpload(imgFile);
     }
 
-    try {
-      await updateProduct(p.id, fields);
-      toast("Produto atualizado", "success");
-      await listProducts();
-      editor.remove();
-    } catch (e) {
-      console.error(e);
-      toast(e.message || "Erro ao atualizar", "error");
-    }
+    await updateProduct(p.id, fields);
+    toast("Atualizado!", "success");
+    await listProducts();
+    editor.remove();
   };
 
   card.append(editor);
-}
+};
 
 function htmlEscape(s) {
   return String(s)
@@ -325,12 +363,14 @@ function htmlEscape(s) {
     .replaceAll("'", "&#039;");
 }
 
-// ---------- Eventos ----------
+/* ======================
+  OS
+====================== */
 function bindEvents() {
   $("#btnSaveCfg").onclick = () => {
     cfg.tenant = $("#tenantSlug").value;
     cfg.token = $("#adminToken").value;
-    toast("Config salva", "success");
+    toast("Config salva!", "success");
   };
 
   $("#btnClearCfg").onclick = () => {
@@ -342,8 +382,8 @@ function bindEvents() {
   };
 
   $("#btnRefresh").onclick = () => {
-    if (!ensureCfg()) { toast("Configure Token Admin", "warn"); return; }
-    listProducts().catch((e) => toast(e.message || "Falha ao listar", "error"));
+    if (!ensureCfg()) return toast("Configure Token Admin", "warn");
+    listProducts().catch((e) => toast(e.message, "error"));
   };
 
   $("#np_image").addEventListener("change", (e) => {
@@ -351,26 +391,70 @@ function bindEvents() {
     const prev = $("#np_preview");
     if (file) {
       const url = URL.createObjectURL(file);
-      prev.src = url; prev.style.display = "block";
+      prev.src = url;
+      prev.style.display = "block";
     } else {
       prev.style.display = "none";
     }
   });
 
   $("#btnCreate").onclick = () => {
-    if (!ensureCfg()) { toast("Configure Token Admin", "warn"); return; }
+    if (!ensureCfg()) return toast("Configure Token Admin", "warn");
     createProduct();
   };
 
   $("#btnResetForm").onclick = resetForm;
+
+  /* ---- BRAND EVENTS ---- */
+
+  $("#brandFile").addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    const prev = $("#brandPreview");
+    if (file) {
+      prev.src = URL.createObjectURL(file);
+      prev.style.display = "inline-block";
+    } else {
+      prev.src = "";
+      prev.style.display = "none";
+    }
+  });
+
+  $("#btnUploadBrand").onclick = async () => {
+    if (!ensureCfg()) return toast("Configure Token Admin", "warn");
+    const file = $("#brandFile").files?.[0];
+    if (!file) return toast("Escolha uma imagem", "warn");
+
+    try {
+      const url = await presignAndUpload(file);
+      brand.url = url;
+      renderBrandFromStorage();
+      toast("Logotipo atualizado!", "success");
+    } catch (e) {
+      console.error(e);
+      toast(e.message, "error");
+    }
+  };
+
+  $("#btnClearBrand").onclick = () => {
+    brand.url = "";
+    $("#brandPreview").src = "";
+    $("#brandPreview").style.display = "none";
+    $("#brandFile").value = "";
+    renderBrandFromStorage();
+    toast("Logotipo removido", "info");
+  };
 }
 
-// ---------- Init ----------
+/* ======================
+   INIT
+====================== */
 (function init() {
   ensureCfg();
   bindEvents();
-  // Tenta listar na primeira carga se já tiver token
+
   if (cfg.token) listProducts().catch(() => {});
-  // Mostra o tenant fixo no input
+
   $("#tenantSlug").value = getTenant();
+
+  renderBrandFromStorage(); // 🔥 SEMPRE mostra o banner
 })();

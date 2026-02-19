@@ -1,85 +1,157 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Admin · Cardápio</title>
-  <link rel="stylesheet" href="./styles.css"/>
+  <meta charset="utf-8">
+  <title>BlackBot — Admin de Produtos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Seu CSS já existente para o Admin -->
+  <link rel="stylesheet" href="/static/admin/styles.css">
+  <style>
+    /* Ajustes mínimos (opcional, só pra garantir) */
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; }
+    .container { max-width: 960px; margin: 0 auto; padding: 16px; }
+    header h1 { margin: 0 0 12px 0; font-size: 22px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 16px 0; }
+    .row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .row--2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .row--inline { display: flex; gap: 8px; align-items: center; }
+    label { color: #374151; font-size: 13px; }
+    input[type="text"], input[type="number"], textarea { border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+    textarea { min-height: 72px; resize: vertical; }
+    .btn { border: 1px solid #111827; background: #111827; color: #fff; border-radius: 10px; padding: 10px 14px; cursor: pointer; font-weight: 600; }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .btn--ghost { border: 1px solid #d1d5db; background: #fff; color: #111827; }
+    .btn--danger { border: 1px solid #ef4444; background: #ef4444; color: #fff; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 720px) { .row--2col, .grid-2 { grid-template-columns: 1fr; } }
+
+    /* Produtos */
+    .products-wrap { margin-top: 12px; }
+    .product-card { display: grid; grid-template-columns: 120px 1fr; gap: 12px; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; background: #fff; }
+    .product-card__img { width: 120px; height: 120px; object-fit: cover; border-radius: 8px; background: #f9fafb; border: 1px solid #e5e7eb; }
+    .product-card__body { display: grid; gap: 6px; }
+    .product-card__title { font-weight: 700; font-size: 16px; }
+    .product-card__price { font-weight: 700; color: #16a34a; }
+    .product-card__desc { color: #6b7280; font-size: 14px; }
+    .product-card__actions { display: flex; gap: 8px; }
+
+    /* Editor inline */
+    .editor { margin-top: 10px; padding: 12px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f9fafb; }
+
+    /* Toast */
+    .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; background: #111827; color: #fff; padding: 10px 14px; border-radius: 10px; opacity: 0; pointer-events: none; transition: .25s; z-index: 9999; }
+    .toast--show { opacity: 1; pointer-events: auto; }
+    .toast--success { background: #16a34a; }
+    .toast--warn { background: #f59e0b; }
+    .toast--error { background: #ef4444; }
+  </style>
 </head>
 <body>
-  <header class="appbar">
-    <div class="appbar__title">Admin · Cardápio</div>
-    <div class="appbar__actions">
-      <button id="btnRefresh" class="btn btn--ghost">Atualizar</button>
-    </div>
-  </header>
-
-  <main class="container">
-    <!-- CONFIG -->
-    <section class="card">
-      <h2>Configuração</h2>
-      <div class="row">
-        <label>Tenant Slug</label>
-        <input id="tenantSlug" placeholder="ex.: confeitaria-ana" />
-      </div>
-      <div class="row">
-        <label>X-Admin-Token</label>
-        <input id="adminToken" placeholder="cole o token do .env" />
-      </div>
-      <div class="row row--inline">
-        <button id="btnSaveCfg" class="btn">Salvar</button>
-        <button id="btnClearCfg" class="btn btn--ghost">Limpar</button>
-      </div>
-      <p class="hint">As configurações ficam salvas no seu navegador (localStorage).</p>
-    </section>
-
-    <!-- NOVO PRODUTO -->
-    <section class="card">
-      <h2>Novo Produto</h2>
-      <div class="grid">
-        <div class="row">
-          <label>Nome</label>
-          <input id="np_name" placeholder="Ex.: Bolo de Cenoura" />
-        </div>
-        <div class="row">
-          <label>Descrição</label>
-          <textarea id="np_description" placeholder="Breve descrição do produto"></textarea>
-        </div>
-        <div class="row row--2col">
-          <div>
-            <label>SKU (opcional)</label>
-            <input id="np_sku" placeholder="Ex.: BOLO-CEN-01" />
+  <div class="container">
+    <header>
+      <h1>Admin — Produtos</h1>
+      <div class="card">
+        <div class="grid-2">
+          <div class="row">
+            <label for="tenantSlug">Tenant (slug)</label>
+            <input id="tenantSlug" type="text" placeholder="confeiteira">
+            <small style="color:#6b7280">MVP: usamos o slug fixo <b>confeiteira</b> no JS.</small>
           </div>
-          <div>
-            <label>Preço (R$)</label>
-            <input id="np_price" placeholder="Ex.: 25,90" inputmode="decimal"/>
+          <div class="row">
+            <label for="adminToken">Token Admin</label>
+            <input id="adminToken" type="text" placeholder="Informe o X-Admin-Token">
           </div>
         </div>
-        <div class="row">
-          <label>Imagem</label>
-          <input id="np_image" type="file" accept="image/*"/>
-          <img id="np_preview" class="preview" style="display:none"/>
-        </div>
-        <div class="row row--inline">
-          <button id="btnCreate" class="btn">Criar produto</button>
-          <button id="btnResetForm" class="btn btn--ghost">Limpar</button>
+        <div class="toolbar">
+          <button id="btnSaveCfg" class="btn">Salvar config</button>
+          <button id="btnClearCfg" class="btn btn--ghost">Limpar config</button>
+          <button id="btnRefresh" class="btn btn--ghost">Atualizar lista</button>
         </div>
       </div>
-    </section>
+    </header>
 
-    <!-- LISTA -->
+    <!-- ================================ -->
+    <!-- IDENTIDADE VISUAL / BANNER LOGO -->
+    <!-- ================================ -->
     <section class="card">
-      <h2>Produtos</h2>
-      <div id="products" class="products"></div>
-      <div id="emptyState" class="empty" style="display:none">
-        Nenhum produto cadastrado.
+      <h2 style="margin:0 0 12px 0;">Identidade Visual</h2>
+      <p style="margin:0 0 12px 0;color:#6b7280">
+        Envie o logotipo da sua empresa. Ele ficará visível no topo desta página do Admin (salvo no navegador).
+      </p>
+
+      <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+        <div>
+          <img id="brandPreview"
+               alt="Logotipo"
+               style="display:none;width:280px;height:100px;object-fit:contain;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:8px">
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <input id="brandFile" type="file" accept="image/*">
+          <div class="toolbar">
+            <button id="btnUploadBrand" class="btn">Enviar logotipo</button>
+            <button id="btnClearBrand" class="btn btn--ghost">Remover</button>
+          </div>
+          <small style="color:#6b7280">Sugestão: 1120×400px (ou proporcional). PNG/JPG.</small>
+        </div>
+      </div>
+
+      <!-- Banner fixo mostrado sempre no topo do Admin -->
+      <div id="brandBanner" style="display:none;margin:16px 0 0 0;text-align:center">
+        <img id="brandBannerImg" alt="Banner" style="max-width:100%;height:80px;object-fit:contain;">
       </div>
     </section>
-  </main>
 
-  <!-- Toast simples -->
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <!-- ================================ -->
+    <!-- FORM: NOVO PRODUTO -->
+    <!-- ================================ -->
+    <section class="card">
+      <h2 style="margin:0 0 12px 0;">Novo produto</h2>
+      <div class="row">
+        <label for="np_name">Nome</label>
+        <input id="np_name" type="text" placeholder="Ex.: Pizza Margherita">
+      </div>
+      <div class="row">
+        <label for="np_description">Descrição</label>
+        <textarea id="np_description" placeholder="Ex.: Queijo, tomate e manjericão"></textarea>
+      </div>
+      <div class="row row--2col">
+        <div class="row">
+          <label for="np_sku">SKU (opcional)</label>
+          <input id="np_sku" type="text" placeholder="Ex.: SKU-001">
+        </div>
+        <div class="row">
+          <label for="np_price">Preço (R$)</label>
+          <input id="np_price" type="text" inputmode="decimal" placeholder="Ex.: 39,99">
+        </div>
+      </div>
+      <div class="row">
+        <label for="np_image">Imagem</label>
+        <input id="np_image" type="file" accept="image/*">
+        <img id="np_preview" alt="Prévia" style="display:none;width:160px;height:160px;object-fit:cover;border:1px solid #e5e7eb;border-radius:8px;margin-top:8px;">
+      </div>
+      <div class="toolbar">
+        <button id="btnCreate" class="btn">Criar produto</button>
+        <button id="btnResetForm" class="btn btn--ghost">Limpar</button>
+      </div>
+    </section>
 
-  <script src="./products.js"></script>
+    <!-- ================================ -->
+    <!-- LISTA DE PRODUTOS -->
+    <!-- ================================ -->
+    <section class="products-wrap">
+      <div id="emptyState" class="card" style="display:none;color:#6b7280">
+        Nenhum produto cadastrado ainda.
+      </div>
+      <div id="products" class="vstack" style="display:grid;gap:12px;"></div>
+    </section>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Seu JS do Admin (versão final que já te enviei) -->
+  <script src="/static/admin/products.js"></script>
 </body>
 </html>
