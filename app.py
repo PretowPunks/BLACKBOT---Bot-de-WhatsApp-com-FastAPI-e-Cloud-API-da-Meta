@@ -103,6 +103,17 @@ def public_products_json(tenant: str, limit: int = 200, offset: int = 0):
     except Exception as exc:
         logging.exception("public_products_json failed")
         raise HTTPException(status_code=500, detail=f"public_products_failed: {exc}")
+    
+
+app.get("/m/{tenant}/{product_id}", include_in_schema=False)
+async def product_page(tenant: str, product_id: str):
+    """
+    Página pública de produto (somente HTML).
+    Renderiza static/menu/product.html; o JS desta página busca /m/{tenant}/products.json
+    e filtra pelo {product_id}.
+    """
+    return FileResponse("static/menu/product.html")
+
 
 @app.get("/")
 def root_redirect():
