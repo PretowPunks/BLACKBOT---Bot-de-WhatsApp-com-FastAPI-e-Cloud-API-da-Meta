@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Carrinho — BlackBot</title>
+  <link rel="stylesheet" href="/static/menu/cart.css" />
+</head>
+<body>
+  <header class="brand">
+    <img id="brandBanner" class="brand__banner" alt="Banner do estabelecimento" />
+    <div class="brand__info">
+      <h1 id="brandName" class="brand__name">Seu Negócio</h1>
+    </div>
+  </header>
+
+  <main class="container">
+    <h2 class="title">Seu carrinho</h2>
+
+    <section id="cartEmpty" class="empty hidden">
+      Seu carrinho está vazio.
+    </section>
+
+    <section id="cartSection" class="cart hidden">
+      <div id="cartList" class="cart__list"></div>
+
+      <div class="cart__summary">
+        <div class="line">
+          <span>Subtotal</span>
+          <strong id="subtotal">R$ 0,00</strong>
+        </div>
+        <div class="line">
+          <span>Entrega</span>
+          <span class="muted">Combinar via WhatsApp</span>
+        </div>
+        <div class="line total">
+          <span>Total</span>
+          <strong id="total">R$ 0,00</strong>
+        </div>
+      </div>
+
+      <div class="cart__actions">
+        <a id="catalogBtn" class="btn secondary">↩️ Catálogo de produtos</a>
+        <a id="sendWhatsAppBtn" class="btn primary" target="_blank" rel="noopener">
+          📲 Enviar pedido (WhatsApp)
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/menu/cart.js"></script>
+</body>
+</html>

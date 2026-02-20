@@ -103,18 +103,14 @@ def public_products_json(tenant: str, limit: int = 200, offset: int = 0):
     except Exception as exc:
         logging.exception("public_products_json failed")
         raise HTTPException(status_code=500, detail=f"public_products_failed: {exc}")
-    
 
-
-@app.get("/m/{tenant}/{product_id}", include_in_schema=False)
-async def product_page(tenant: str, product_id: str):
+@app.get("/m/{tenant}/cart", include_in_schema=False)
+async def cart_page(tenant: str):
     """
-    Página pública de produto (somente HTML).
-    O JS desta página busca /m/{tenant}/products.json e filtra pelo {product_id}.
+    Página pública do carrinho (HTML).
+    O JS desta página lê o carrinho do localStorage por tenant e monta o pedido.
     """
-    return FileResponse("static/menu/product.html")
-
-
+    return FileResponse("static/menu/cart.html")
 
 @app.get("/")
 def root_redirect():
