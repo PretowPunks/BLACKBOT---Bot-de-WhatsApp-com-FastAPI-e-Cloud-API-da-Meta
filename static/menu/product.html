@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Produto — BlackBot</title>
+  <link rel="stylesheet" href="/static/menu/product.css">
+</head>
+<body>
+  <header class="brand">
+    <img id="brandBanner" class="brand__banner" alt="Banner do estabelecimento" />
+    <div class="brand__info">
+      <h1 id="brandName" class="brand__name">Seu Negócio</h1>
+    </div>
+  </header>
+
+  <main class="container">
+    <a id="backLink" class="back-link" href="#">← Voltar ao cardápio</a>
+
+    <section id="productSection" class="product">
+      <div class="product__image">
+        <img id="productImage" alt="Imagem do produto" />
+      </div>
+
+      <div class="product__details">
+        <h2 id="productName" class="product__name"></h2>
+        <p id="productDescription" class="product__description"></p>
+
+        <div class="product__meta">
+          <span id="productPrice" class="product__price"></span>
+          <span id="productSku" class="product__sku"></span>
+        </div>
+
+        <div class="product__controls">
+          <label for="qty" class="qty__label">Qtd</label>
+          <input id="qty" class="qty__input" type="number" min="1" value="1" inputmode="numeric" />
+        </div>
+
+        <div class="product__actions">
+          <a id="whatsappBtn" class="whatsapp-btn" target="_blank" rel="noopener">
+            📲 Pedir via WhatsApp
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section id="notFound" class="hidden not-found">
+      Produto não encontrado.
+    </section>
+  </main>
+
+  <script src="/static/menu/product.js"></script>
+</body>
+</html>

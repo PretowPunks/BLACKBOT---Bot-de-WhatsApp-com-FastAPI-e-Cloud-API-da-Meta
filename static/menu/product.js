@@ -50,6 +50,7 @@
       `Preço unitário: ${unit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
       `Total: ${Number(total).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
       `Loja: ${brand}`,
+      `Link: ${location.origin}/m/${tenant}/${product.id}`
     ].filter(Boolean);
 
     const text = encodeURIComponent(lines.join("\n"));
