@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cardápio</title>
+
+  <!-- CSS do cardápio -->
+  <link rel="stylesheet" href="/static/menu/menu.css" />
+  <meta name="theme-color" content="#e91e63" />
+</head>
+<body>
+  <header class="header">
+    <img id="banner" class="banner" alt="Banner da loja" />
+    <div class="header-title">
+      <h1 id="storeName">Cardápio</h1>
+      <p id="storeSubtitle" class="subtitle"></p>
+    </div>
+  </header>
+
+  <main>
+    <section id="notice" class="notice" hidden></section>
+    <section class="grid" id="productGrid" aria-live="polite"></section>
+  </main>
+
+  <footer class="footer">
+    <small>Feito com <strong>BlackBot</strong></small>
+  </footer>
+
+  <!-- JS do cardápio -->
+  <script src="/static/menu/menu.js"></script>
+</body>
+</html>

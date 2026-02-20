@@ -5,7 +5,7 @@ import logging
 import requests
 
 from fastapi import FastAPI, Request, HTTPException, Body, Header
-from fastapi.responses import JSONResponse, StreamingResponse, RedirectResponse
+from fastapi.responses import JSONResponse, StreamingResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -52,6 +52,57 @@ if not os.path.isdir("static"):
     os.makedirs("static/admin", exist_ok=True)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# =======================================
+# PUBLIC MENU: /m/{tenant}
+# =======================================
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+MENU_FILE = os.path.join(STATIC_DIR, "menu", "menu.html")
+os.makedirs(os.path.join(STATIC_DIR, "menu"), exist_ok=True)
+
+@app.get("/m/{tenant}")
+def public_menu_html(tenant: str):
+    """
+    Serve o HTML do cardápio público.
+    O {tenant} é lido pelo menu.js a partir da URL.
+    """
+    if not os.path.isfile(MENU_FILE):
+        raise HTTPException(status_code=404, detail="menu_html_not_found")
+    return FileResponse(MENU_FILE)
+
+
+@app.get("/m/{tenant}/products.json")
+def public_products_json(tenant: str, limit: int = 200, offset: int = 0):
+    """
+    Endpoint público SOMENTE-LEITURA para o cardápio.
+    NÃO exige X-Admin-Token. Retorna { items, total }.
+    """
+    try:
+        # Import local (evita ciclos caso o arquivo mude de lugar)
+        import storage  # type: ignore
+
+        limit = min(max(1, int(limit)), 200)
+        offset = max(0, int(offset))
+
+        items = storage.list_products(tenant_slug=tenant, limit=limit, offset=offset)  # type: ignore
+        total = storage.count_products(tenant_slug=tenant)  # type: ignore
+
+        # Sanitização leve
+        safe_items = []
+        for p in items:
+            safe_items.append({
+                "id": p.get("id"),
+                "sku": p.get("sku"),
+                "name": p.get("name") or "",
+                "description": p.get("description") or "",
+                "price_cents": p.get("price_cents") or 0,
+                "currency": p.get("currency") or "BRL",
+                "image_url": p.get("image_url") or "",
+            })
+        return {"items": safe_items, "total": int(total)}
+    except Exception as exc:
+        logging.exception("public_products_json failed")
+        raise HTTPException(status_code=500, detail=f"public_products_failed: {exc}")
 
 @app.get("/")
 def root_redirect():
